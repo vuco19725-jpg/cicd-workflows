@@ -1,0 +1,126 @@
+name: Reusable PR Check
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+        description: "go | node"
+      lint-command:
+        required: false
+        type: string
+        description: "Override default lint command"
+      build-command:
+        required: false
+        type: string
+        description: "Override default build command"
+      test-command:
+        required: false
+        type: string
+        description: "Override default test command"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - if: ${{ inputs.lint-command != '' }}
+        run: ${{ inputs.lint-command }}
+      - if: ${{ inputs.lint-command == '' && inputs.language == 'go' }}
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+      - if: ${{ inputs.lint-command == '' && inputs.language == 'node' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - if: ${{ inputs.lint-command == '' && inputs.language == 'node' }}
+        run: npm install && npm run lint
+        working-directory: web
+
+  build-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - if: ${{ inputs.build-command != '' }}
+        run: ${{ inputs.build-command }}
+      - if: ${{ inputs.build-command == '' && inputs.language == 'go' }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - if: ${{ inputs.build-command == '' && inputs.language == 'go' }}
+        run: go build ./...
+      - if: ${{ inputs.build-command == '' && inputs.language == 'node' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - if: ${{ inputs.build-command == '' && inputs.language == 'node' }}
+        run: npm install && npm run build
+        working-directory: web
+
+  unit-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - if: ${{ inputs.test-command != '' }}
+        run: ${{ inputs.test-command }}
+      - if: ${{ inputs.test-command == '' && inputs.language == 'go' }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - if: ${{ inputs.test-command == '' && inputs.language == 'go' }}
+        run: go test ./...
+      - if: ${{ inputs.test-command == '' && inputs.language == 'node' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - if: ${{ inputs.test-command == '' && inputs.language == 'node' }}
+        run: npm install && npm test
+        working-directory: web
+
+  security-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: 1
+
+  ai-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    if: github.event.pull_request && github.actor != 'dependabot[bot]'
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate diff
+        run: |
+          git diff origin/main...HEAD > /tmp/pr.diff
+          echo "Diff: $(wc -c < /tmp/pr.diff) bytes, $(wc -l < /tmp/pr.diff) lines"
+
+      - name: AI Code Review
+        if: env.DEEPSEEK_API_KEY != ''
+        run: bash scripts/ai-review.sh "${{ github.event.pull_request.number }}" "${{ github.event.pull_request.head.sha }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip AI review
+        if: env.DEEPSEEK_API_KEY == ''
+        run: echo "AI review skipped - DEEPSEEK_API_KEY secret not configured"
