@@ -265,7 +265,7 @@ fi
 echo "Decision: $DECISION (CRIT=$CRIT_COUNT HIGH=$HIGH_COUNT MED=$MED_COUNT LOW=$LOW_COUNT)"
 
 # ──────────────────────────────────────────────
-# 8. 发布审查
+# 8. 发布审查（统一走 Reviews API，确保 APPROVE/REQUEST_CHANGES 生效）
 # ──────────────────────────────────────────────
 case "$EVENT" in
   APPROVE)          FLAG="--approve" ;;
@@ -273,26 +273,21 @@ case "$EVENT" in
   *)                FLAG="--comment" ;;
 esac
 
-if [ "$COMMENT_COUNT" -gt 0 ] && [ -n "$HEAD_SHA" ]; then
-  echo "Posting review as $EVENT with $COMMENT_COUNT inline comments..."
+echo "Posting review as $EVENT with $COMMENT_COUNT inline comments..."
 
-  jq -n \
-    --arg body "$(cat "$REVIEW_FILE")" \
-    --arg event "$EVENT" \
-    --arg commit_id "$HEAD_SHA" \
-    --argjson comments "$(cat "$INLINE_FILE")" \
-    '{body: $body, event: $event, commit_id: $commit_id, comments: $comments}' \
-    > /tmp/review-payload.json
+jq -n \
+  --arg body "$(cat "$REVIEW_FILE")" \
+  --arg event "$EVENT" \
+  --arg commit_id "$HEAD_SHA" \
+  --argjson comments "$(cat "$INLINE_FILE")" \
+  '{body: $body, event: $event, commit_id: $commit_id, comments: $comments}' \
+  > /tmp/review-payload.json
 
-  if gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews" \
-    --input /tmp/review-payload.json --silent 2>&1; then
-    echo "Review posted as $EVENT"
-  else
-    echo "Inline review failed, falling back to $EVENT"
-    gh pr review "$PR_NUMBER" --repo "$OWNER/$REPO" --body-file "$REVIEW_FILE" $FLAG
-  fi
+if gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews" \
+  --input /tmp/review-payload.json --silent 2>&1; then
+  echo "Review posted as $EVENT"
 else
-  echo "No inline comments, posting plain review as $EVENT"
+  echo "Reviews API failed, falling back to gh pr review $FLAG"
   gh pr review "$PR_NUMBER" --repo "$OWNER/$REPO" --body-file "$REVIEW_FILE" $FLAG
 fi
 
