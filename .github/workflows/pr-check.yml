@@ -133,7 +133,7 @@ jobs:
           cp _shared/.github/ai-review-rules.md /tmp/ai-review-rules.md
           bash /tmp/ai-review.sh "${{ github.event.pull_request.number }}" "${{ github.event.pull_request.head.sha }}"
         env:
-          GH_TOKEN: ${{ secrets.BOT_PAT != '' && secrets.BOT_PAT || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.BOT_PAT }}
 
       - name: Skip AI review
         if: env.DEEPSEEK_API_KEY == ''
