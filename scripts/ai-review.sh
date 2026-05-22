@@ -233,10 +233,10 @@ STATS_LINE=$(grep '##STATS##' /tmp/review-raw.txt 2>/dev/null || echo "")
 # ──────────────────────────────────────────────
 # 7. 审查决策：统计严重程度，决定 APPROVE / REQUEST_CHANGES / COMMENT
 # ──────────────────────────────────────────────
-CRIT_COUNT=$(grep -c '^\[CRITICAL\]' /tmp/review-raw.txt 2>/dev/null || echo 0 | tr -d '[:space:]')
-HIGH_COUNT=$(grep -c '^\[HIGH\]' /tmp/review-raw.txt 2>/dev/null || echo 0 | tr -d '[:space:]')
-MED_COUNT=$(grep -c '^\[MEDIUM\]' /tmp/review-raw.txt 2>/dev/null || echo 0 | tr -d '[:space:]')
-LOW_COUNT=$(grep -c '^\[LOW\]' /tmp/review-raw.txt 2>/dev/null || echo 0 | tr -d '[:space:]')
+CRIT_COUNT=$(grep -c '^\[CRITICAL\]' /tmp/review-raw.txt 2>/dev/null | tr -d '[:space:]'); CRIT_COUNT=${CRIT_COUNT:-0}
+HIGH_COUNT=$(grep -c '^\[HIGH\]' /tmp/review-raw.txt 2>/dev/null | tr -d '[:space:]'); HIGH_COUNT=${HIGH_COUNT:-0}
+MED_COUNT=$(grep -c '^\[MEDIUM\]' /tmp/review-raw.txt 2>/dev/null | tr -d '[:space:]'); MED_COUNT=${MED_COUNT:-0}
+LOW_COUNT=$(grep -c '^\[LOW\]' /tmp/review-raw.txt 2>/dev/null | tr -d '[:space:]'); LOW_COUNT=${LOW_COUNT:-0}
 
 if [ "$CRIT_COUNT" -eq 0 ] && [ "$HIGH_COUNT" -eq 0 ]; then
   EVENT="APPROVE"
