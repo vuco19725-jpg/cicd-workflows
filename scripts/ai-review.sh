@@ -267,6 +267,12 @@ echo "Decision: $DECISION (CRIT=$CRIT_COUNT HIGH=$HIGH_COUNT MED=$MED_COUNT LOW=
 # ──────────────────────────────────────────────
 # 8. 发布审查
 # ──────────────────────────────────────────────
+case "$EVENT" in
+  APPROVE)          FLAG="--approve" ;;
+  REQUEST_CHANGES)  FLAG="--request-changes" ;;
+  *)                FLAG="--comment" ;;
+esac
+
 if [ "$COMMENT_COUNT" -gt 0 ] && [ -n "$HEAD_SHA" ]; then
   echo "Posting review as $EVENT with $COMMENT_COUNT inline comments..."
 
@@ -282,12 +288,12 @@ if [ "$COMMENT_COUNT" -gt 0 ] && [ -n "$HEAD_SHA" ]; then
     --input /tmp/review-payload.json --silent 2>&1; then
     echo "Review posted as $EVENT"
   else
-    echo "Inline review failed, falling back"
-    gh pr review "$PR_NUMBER" --repo "$OWNER/$REPO" --body-file "$REVIEW_FILE" --comment
+    echo "Inline review failed, falling back to $EVENT"
+    gh pr review "$PR_NUMBER" --repo "$OWNER/$REPO" --body-file "$REVIEW_FILE" $FLAG
   fi
 else
   echo "No inline comments, posting plain review as $EVENT"
-  gh pr review "$PR_NUMBER" --repo "$OWNER/$REPO" --body-file "$REVIEW_FILE" --comment
+  gh pr review "$PR_NUMBER" --repo "$OWNER/$REPO" --body-file "$REVIEW_FILE" $FLAG
 fi
 
 echo "=== AI Review Complete ==="
