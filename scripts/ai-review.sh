@@ -3,9 +3,9 @@ set -e
 
 PR_NUMBER="$1"
 HEAD_SHA="$2"
-OWNER="vuco19725-jpg"
-REPO="cicd-"
-RULES_FILE=".github/ai-review-rules.md"
+OWNER="${GITHUB_REPOSITORY%/*}"
+REPO="${GITHUB_REPOSITORY#*/}"
+RULES_FILE="/tmp/ai-review-rules.md"
 DIFF_FILE="/tmp/pr.diff"
 CONTEXT_FILE="/tmp/pr-context.txt"
 REVIEW_FILE="/tmp/review-body.md"

@@ -110,6 +110,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Checkout shared scripts
+        uses: actions/checkout@v4
+        with:
+          repository: vuco19725-jpg/cicd-workflows
+          path: _shared
+
       - name: Generate diff
         run: |
           git diff origin/main...HEAD > /tmp/pr.diff
@@ -117,7 +123,10 @@ jobs:
 
       - name: AI Code Review
         if: env.DEEPSEEK_API_KEY != ''
-        run: bash scripts/ai-review.sh "${{ github.event.pull_request.number }}" "${{ github.event.pull_request.head.sha }}"
+        run: |
+          cp _shared/scripts/ai-review.sh /tmp/ai-review.sh
+          cp _shared/.github/ai-review-rules.md /tmp/ai-review-rules.md
+          bash /tmp/ai-review.sh "${{ github.event.pull_request.number }}" "${{ github.event.pull_request.head.sha }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
