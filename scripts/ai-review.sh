@@ -224,11 +224,30 @@ COMMENT_COUNT=$(jq 'length' "$INLINE_FILE" 2>/dev/null || echo 0)
 echo "Inline comments: $COMMENT_COUNT"
 
 # ──────────────────────────────────────────────
-# 7. 组装 review body
+# 7. 审查决策 + 组装 review body
 # ──────────────────────────────────────────────
 grep -v '##STATS##' /tmp/review-raw.txt > "$REVIEW_FILE" 2>/dev/null || true
 
 STATS_LINE=$(grep '##STATS##' /tmp/review-raw.txt 2>/dev/null || echo "")
+
+# ──────────────────────────────────────────────
+# 7. 审查决策：统计严重程度，决定 APPROVE / REQUEST_CHANGES / COMMENT
+# ──────────────────────────────────────────────
+CRIT_COUNT=$(grep -c '^\[CRITICAL\]' /tmp/review-raw.txt 2>/dev/null || echo 0)
+HIGH_COUNT=$(grep -c '^\[HIGH\]' /tmp/review-raw.txt 2>/dev/null || echo 0)
+MED_COUNT=$(grep -c '^\[MEDIUM\]' /tmp/review-raw.txt 2>/dev/null || echo 0)
+LOW_COUNT=$(grep -c '^\[LOW\]' /tmp/review-raw.txt 2>/dev/null || echo 0)
+
+if [ "$CRIT_COUNT" -eq 0 ] && [ "$HIGH_COUNT" -eq 0 ]; then
+  EVENT="APPROVE"
+  DECISION="AI审查通过 - 无严重问题，建议合并"
+elif [ "$CRIT_COUNT" -gt 0 ]; then
+  EVENT="REQUEST_CHANGES"
+  DECISION="AI审查阻止 - 存在 ${CRIT_COUNT} 个 CRITICAL 问题，必须修复后重新提交"
+else
+  EVENT="COMMENT"
+  DECISION="AI审查建议 - 存在 ${HIGH_COUNT} 个 HIGH 问题，请人工确认后合并"
+fi
 
 {
   echo ""
@@ -239,33 +258,35 @@ STATS_LINE=$(grep '##STATS##' /tmp/review-raw.txt 2>/dev/null || echo "")
     echo "- ${STATS_LINE##\#\#STATS\#\# }"
   fi
   echo "- 模型: deepseek-v4-pro"
+  echo ""
+  echo "**${DECISION}**"
 } >> "$REVIEW_FILE"
 
-echo "=== Review Body ==="
-cat "$REVIEW_FILE"
+echo "Decision: $DECISION (CRIT=$CRIT_COUNT HIGH=$HIGH_COUNT MED=$MED_COUNT LOW=$LOW_COUNT)"
 
 # ──────────────────────────────────────────────
 # 8. 发布审查
 # ──────────────────────────────────────────────
 if [ "$COMMENT_COUNT" -gt 0 ] && [ -n "$HEAD_SHA" ]; then
-  echo "Posting review with $COMMENT_COUNT inline comments..."
+  echo "Posting review as $EVENT with $COMMENT_COUNT inline comments..."
 
   jq -n \
     --arg body "$(cat "$REVIEW_FILE")" \
+    --arg event "$EVENT" \
     --arg commit_id "$HEAD_SHA" \
     --argjson comments "$(cat "$INLINE_FILE")" \
-    '{body: $body, event: "COMMENT", commit_id: $commit_id, comments: $comments}' \
+    '{body: $body, event: $event, commit_id: $commit_id, comments: $comments}' \
     > /tmp/review-payload.json
 
   if gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews" \
     --input /tmp/review-payload.json --silent 2>&1; then
-    echo "Inline review posted successfully"
+    echo "Review posted as $EVENT"
   else
-    echo "Inline review failed, falling back to plain comment"
+    echo "Inline review failed, falling back"
     gh pr review "$PR_NUMBER" --repo "$OWNER/$REPO" --body-file "$REVIEW_FILE" --comment
   fi
 else
-  echo "No inline comments, posting plain review"
+  echo "No inline comments, posting plain review as $EVENT"
   gh pr review "$PR_NUMBER" --repo "$OWNER/$REPO" --body-file "$REVIEW_FILE" --comment
 fi
 
