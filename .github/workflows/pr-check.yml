@@ -19,6 +19,9 @@ on:
         required: false
         type: string
         description: "Override default test command"
+    secrets:
+      DEEPSEEK_API_KEY:
+        required: false
 
 permissions:
   contents: read
