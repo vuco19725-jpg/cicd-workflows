@@ -51,22 +51,13 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - name: YAML syntax check
-        uses: ibiqlik/action-yamllint@v3
-        with:
-          file_or_dir: .
-          config_data: |
-            extends: default
-            rules:
-              line-length: disable
-              document-start: disable
-        continue-on-error: true
       - name: Check placeholder values
         run: |
-          if find . \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) \
+          PLACEHOLDERS=$(find . \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) \
             ! -path "./node_modules/*" ! -path "./vendor/*" \
-            -exec grep -l "REPLACE_ME\|TODO_SECRET\|CHANGEME\|<INSERT>" {} + 2>/dev/null; then
-            echo "::error::配置文件中有未替换的占位符"
+            -exec grep -l "REPLACE_ME\|TODO_SECRET\|CHANGEME\|<INSERT>" {} + 2>/dev/null || true)
+          if [ -n "$PLACEHOLDERS" ]; then
+            echo "::error::配置文件中有未替换的占位符: $PLACEHOLDERS"
             exit 1
           fi
           echo "Config validation passed"
