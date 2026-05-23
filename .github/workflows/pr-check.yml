@@ -46,7 +46,7 @@ concurrency:
 jobs:
   # ── 配置有效性检查 ──
   config-check:
-    if: ${{ inputs.enable-config-check }}
+    if: ${{ inputs.enable-config-check == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -64,7 +64,7 @@ jobs:
 
   # ── 代码级安全分析（CodeQL）──
   codeql:
-    if: ${{ inputs.enable-codeql }}
+    if: ${{ inputs.enable-codeql == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
