@@ -145,8 +145,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Enable auto-merge
+      - name: Auto-merge
         run: |
-          gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
+          RESP=$(curl -s -X PUT \
+            -H "Authorization: token $BOT_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/merge" \
+            -d '{"merge_method":"squash"}')
+          echo "$RESP"
+          if echo "$RESP" | grep -q '"merged":true'; then
+            echo "Merged successfully"
+          else
+            echo "Merge failed, enabling auto-merge fallback"
+            gh pr merge --auto --squash "${{ github.event.pull_request.number }}" || true
+          fi
         env:
+          BOT_PAT: ${{ secrets.BOT_PAT }}
           GH_TOKEN: ${{ secrets.BOT_PAT }}
