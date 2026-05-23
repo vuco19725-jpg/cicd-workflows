@@ -6,6 +6,11 @@ HEAD_SHA="$2"
 OWNER="${GITHUB_REPOSITORY%/*}"
 REPO="${GITHUB_REPOSITORY#*/}"
 RULES_FILE="/tmp/ai-review-rules.md"
+# 项目有自定义规则就用项目的，否则用共享默认
+if [ -f ".github/ai-review-rules.md" ]; then
+  RULES_FILE=".github/ai-review-rules.md"
+  echo "Using project-specific review rules"
+fi
 DIFF_FILE="/tmp/pr.diff"
 CONTEXT_FILE="/tmp/pr-context.txt"
 REVIEW_FILE="/tmp/review-body.md"
@@ -138,28 +143,39 @@ jq -n \
   --arg diff "$DIFF" \
   '{
     model: "deepseek-v4-pro",
-    max_tokens: 4096,
+    max_tokens: 8192,
     messages: [{
       role: "user",
       content: (
-        "你是一个代码审查员。请根据审查规则检查代码变更。\n\n"
-        + "## 输出要求\n"
-        + "对每个发现的问题，严格按以下格式输出一行：\n"
-        + "  [严重程度] 文件:行号 说明\n"
-        + "严重程度必须是 CRITICAL / HIGH / MEDIUM / LOW。\n"
-        + "如果没有发现问题，输出：未发现问题。\n"
-        + "不要输出前言、总结或 markdown 标题。使用中文。\n"
-        + "行号必须基于下面提供的完整文件内容确定。\n\n"
+        "## 角色\n"
+        + "你是资深代码审查专家，15年全栈经验，专注安全漏洞检测、性能优化和代码质量。\n\n"
+        + "## 审查范围（只查这些）\n"
+        + "1. 安全漏洞：注入攻击、认证缺陷、密钥泄露、不安全反序列化\n"
+        + "2. 错误处理：吞错误、敏感信息泄露、输入校验缺失、幂等性\n"
+        + "3. 性能问题：N+1查询、缺少索引、无超时的外部调用\n"
+        + "4. 代码质量：死代码、魔法数字、过长函数、重复代码\n"
+        + "5. 数据库迁移：NOT NULL无默认值、破坏性变更\n"
+        + "6. 测试覆盖：未测试的错误分支、边界条件缺失\n\n"
+        + "## 不要查（忽略这些）\n"
+        + "- 代码格式和风格（已由 linter/formatter 处理）\n"
+        + "- 注释是否完整（除非代码会误导人）\n"
+        + "- 变量命名偏好（除非单字符非循环变量）\n"
+        + "- 无具体理由的'建议使用XX模式'\n\n"
+        + "## 输出格式\n"
+        + "每个问题一行：[严重程度] 文件:行号 分类 说明\n"
+        + "严重程度：CRITICAL | HIGH | MEDIUM | LOW\n"
+        + "分类：安全 | 错误处理 | 性能 | 代码质量 | DB迁移 | 测试\n"
+        + "无问题时输出：未发现问题。\n"
+        + "不要输出前言、总结或markdown标题。使用中文。\n\n"
         + "## 输出统计\n"
-        + "在所有问题之后，附加一行统计：\n"
-        + "  ##STATS## files=N logic=N skipped=N crit=N high=N med=N low=N\n\n"
-        + "--- 审查规则 ---\n\($rules)\n\n"
-        + "--- 修改的文件（完整内容）---\n\($context)\n\n"
-        + "--- GIT DIFF ---\n\($diff)"
+        + "最后加一行：##STATS## files=N logic=N skipped=N crit=N high=N med=N low=N\n\n"
+        + "## 审查规则\n\($rules)\n\n"
+        + "## 修改的文件（完整内容）\n\($context)\n\n"
+        + "## GIT DIFF\n\($diff)"
       )
     }]
   }' \
-  | curl -s --max-time 180 \
+  | curl -s --max-time 300 \
     https://api.deepseek.com/anthropic/v1/messages \
     -H "x-api-key: $DEEPSEEK_API_KEY" \
     -H "anthropic-version: 2023-06-01" \
