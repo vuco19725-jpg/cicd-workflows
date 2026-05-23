@@ -19,6 +19,16 @@ on:
         required: false
         type: string
         description: "Override default test command"
+      enable-config-check:
+        required: false
+        type: boolean
+        default: false
+        description: "Enable YAML config validation + placeholder check"
+      enable-codeql:
+        required: false
+        type: boolean
+        default: false
+        description: "Enable CodeQL code-level security analysis"
     secrets:
       DEEPSEEK_API_KEY:
         required: false
@@ -34,6 +44,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── 配置有效性检查 ──
+  config-check:
+    if: ${{ inputs.enable-config-check }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: YAML syntax check
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          file_or_dir: .
+          config_data: |
+            extends: default
+            rules:
+              line-length: disable
+              document-start: disable
+        continue-on-error: true
+      - name: Check placeholder values
+        run: |
+          if find . \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) \
+            ! -path "./node_modules/*" ! -path "./vendor/*" \
+            -exec grep -l "REPLACE_ME\|TODO_SECRET\|CHANGEME\|<INSERT>" {} + 2>/dev/null; then
+            echo "::error::配置文件中有未替换的占位符"
+            exit 1
+          fi
+          echo "Config validation passed"
+
+  # ── 代码级安全分析（CodeQL）──
+  codeql:
+    if: ${{ inputs.enable-codeql }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ inputs.language == 'go' && 'go' || 'javascript-typescript' }}
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -157,7 +212,7 @@ jobs:
         run: echo "AI review skipped - DEEPSEEK_API_KEY secret not configured"
 
   auto-merge:
-    needs: [lint, build-check, unit-test, secret-scan, security-scan, ai-review]
+    needs: [config-check, codeql, lint, build-check, unit-test, secret-scan, security-scan, ai-review]
     if: success()
     runs-on: ubuntu-latest
     timeout-minutes: 2

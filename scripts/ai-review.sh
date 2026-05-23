@@ -11,6 +11,25 @@ if [ -f ".github/ai-review-rules.md" ]; then
   RULES_FILE=".github/ai-review-rules.md"
   echo "Using project-specific review rules"
 fi
+
+# ── 语言自动检测 & 动态规则合并 ──
+SHARED_RULES_DIR="_shared/rules"
+DETECTED_LANGS=""
+[ -f "go.mod" ] && DETECTED_LANGS="$DETECTED_LANGS go"
+[ -f "package.json" ] && DETECTED_LANGS="$DETECTED_LANGS node"
+[ -f "pom.xml" ] || [ -f "build.gradle" ] && DETECTED_LANGS="$DETECTED_LANGS java"
+[ -f "requirements.txt" ] || [ -f "pyproject.toml" ] && DETECTED_LANGS="$DETECTED_LANGS python"
+echo "Detected languages:${DETECTED_LANGS:- none}"
+
+# 追加语言特定规则
+for lang in $DETECTED_LANGS; do
+  LANG_RULES_FILE="$SHARED_RULES_DIR/$lang.md"
+  if [ -f "$LANG_RULES_FILE" ]; then
+    cat "$LANG_RULES_FILE" >> "$RULES_FILE"
+    echo "  + appended rules/$lang.md"
+  fi
+done
+
 DIFF_FILE="/tmp/pr.diff"
 CONTEXT_FILE="/tmp/pr-context.txt"
 REVIEW_FILE="/tmp/review-body.md"
