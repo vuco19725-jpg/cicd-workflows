@@ -67,8 +67,6 @@ jobs:
     if: ${{ inputs.enable-codeql == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      security-events: write
     steps:
       - uses: actions/checkout@v4
       - name: Initialize CodeQL
