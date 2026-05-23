@@ -29,6 +29,10 @@ permissions:
   contents: read
   pull-requests: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -42,7 +46,7 @@ jobs:
         with:
           version: latest
       - if: ${{ inputs.lint-command == '' && inputs.language == 'node' }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
       - if: ${{ inputs.lint-command == '' && inputs.language == 'node' }}
@@ -60,10 +64,11 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24"
+          cache: true
       - if: ${{ inputs.build-command == '' && inputs.language == 'go' }}
         run: go build ./...
       - if: ${{ inputs.build-command == '' && inputs.language == 'node' }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
       - if: ${{ inputs.build-command == '' && inputs.language == 'node' }}
@@ -81,15 +86,27 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24"
+          cache: true
       - if: ${{ inputs.test-command == '' && inputs.language == 'go' }}
         run: go test ./...
       - if: ${{ inputs.test-command == '' && inputs.language == 'node' }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
       - if: ${{ inputs.test-command == '' && inputs.language == 'node' }}
         run: npm install && npm test
         working-directory: web
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   security-scan:
     runs-on: ubuntu-latest
@@ -140,7 +157,7 @@ jobs:
         run: echo "AI review skipped - DEEPSEEK_API_KEY secret not configured"
 
   auto-merge:
-    needs: [lint, build-check, unit-test, security-scan, ai-review]
+    needs: [lint, build-check, unit-test, secret-scan, security-scan, ai-review]
     if: success()
     runs-on: ubuntu-latest
     timeout-minutes: 2
