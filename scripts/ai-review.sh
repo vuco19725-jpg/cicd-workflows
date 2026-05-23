@@ -19,6 +19,7 @@ DETECTED_LANGS=""
 [ -f "package.json" ] && DETECTED_LANGS="$DETECTED_LANGS node"
 [ -f "pom.xml" ] || [ -f "build.gradle" ] && DETECTED_LANGS="$DETECTED_LANGS java"
 [ -f "requirements.txt" ] || [ -f "pyproject.toml" ] && DETECTED_LANGS="$DETECTED_LANGS python"
+[ -f "CMakeLists.txt" ] || [ -f "Makefile" ] || [ -f "meson.build" ] && DETECTED_LANGS="$DETECTED_LANGS c"
 echo "Detected languages:${DETECTED_LANGS:- none}"
 
 # 追加语言特定规则
