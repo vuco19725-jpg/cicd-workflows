@@ -201,8 +201,17 @@ jobs:
         run: echo "AI review skipped - DEEPSEEK_API_KEY secret not configured"
 
   auto-merge:
-    needs: [lint, build-check, unit-test, secret-scan, security-scan, ai-review]
-    if: success()
+    needs: [config-check, codeql, lint, build-check, unit-test, secret-scan, security-scan, ai-review]
+    if: |
+      always() &&
+      (needs.config-check.result == 'success' || needs.config-check.result == 'skipped') &&
+      (needs.codeql.result == 'success' || needs.codeql.result == 'skipped') &&
+      needs.lint.result == 'success' &&
+      needs.build-check.result == 'success' &&
+      needs.unit-test.result == 'success' &&
+      needs.secret-scan.result == 'success' &&
+      needs.security-scan.result == 'success' &&
+      needs.ai-review.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
