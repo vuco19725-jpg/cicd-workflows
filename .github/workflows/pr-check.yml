@@ -29,6 +29,11 @@ on:
         type: boolean
         default: false
         description: "Enable CodeQL code-level security analysis"
+      enable-migration-check:
+        required: false
+        type: boolean
+        default: false
+        description: "Enable database migration safety check (PostgreSQL only)"
     secrets:
       DEEPSEEK_API_KEY:
         required: false
@@ -77,6 +82,24 @@ jobs:
         uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
+
+  # ── 数据库迁移安全复查 ──
+  migration-check:
+    if: inputs.enable-migration-check == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check migration safety (pgvet)
+        uses: onordander/pgvet@v0.2.0
+        with:
+          pattern: "./migrations/**/*.sql"
+        continue-on-error: true
+      - name: Check destructive changes
+        run: |
+          if find . -path "*/migrations/*" -name "*.sql" -exec grep -l "DROP TABLE\|DROP COLUMN\|DROP DATABASE" {} + 2>/dev/null; then
+            echo "::warning::发现破坏性迁移(DROP TABLE/COLUMN)，请确认回滚方案"
+          fi
 
   lint:
     runs-on: ubuntu-latest
@@ -201,7 +224,7 @@ jobs:
         run: echo "AI review skipped - DEEPSEEK_API_KEY secret not configured"
 
   auto-merge:
-    needs: [config-check, codeql, lint, build-check, unit-test, secret-scan, security-scan, ai-review]
+    needs: [config-check, codeql, migration-check, lint, build-check, unit-test, secret-scan, security-scan, ai-review]
     if: |
       always() &&
       (needs.config-check.result == 'success' || needs.config-check.result == 'skipped') &&
