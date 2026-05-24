@@ -128,7 +128,7 @@ jobs:
       - if: ${{ inputs.build-command != '' }}
         run: ${{ inputs.build-command }}
       - if: ${{ inputs.build-command == '' && inputs.language == 'go' }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.24"
           cache: true
@@ -150,7 +150,7 @@ jobs:
       - if: ${{ inputs.test-command != '' }}
         run: ${{ inputs.test-command }}
       - if: ${{ inputs.test-command == '' && inputs.language == 'go' }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.24"
           cache: true
