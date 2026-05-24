@@ -2,6 +2,11 @@ name: One-Click Project Setup
 on:
   workflow_dispatch:
     inputs:
+      owner:
+        required: false
+        type: string
+        default: "vuco19725-jpg"
+        description: "GitHub 用户名或组织名"
       repo:
         required: true
         type: string
@@ -11,6 +16,11 @@ on:
         type: choice
         options: [node, go, java, python, c]
         description: "主要编程语言"
+      approver:
+        required: false
+        type: string
+        default: "vuco19725-jpg"
+        description: "CODEOWNERS 审批人"
       deploy:
         required: false
         type: boolean
@@ -25,8 +35,10 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     env:
-      REPO: vuco19725-jpg/${{ inputs.repo }}
+      OWNER: ${{ inputs.owner }}
+      REPO: ${{ inputs.owner }}/${{ inputs.repo }}
       LANG: ${{ inputs.language }}
+      APPROVER: ${{ inputs.approver }}
     steps:
       - name: Create all project files
         env:
@@ -47,17 +59,17 @@ jobs:
 
           jobs:
             pr-check:
-              uses: vuco19725-jpg/cicd-workflows/.github/workflows/pr-check.yml@main
+              uses: __OWNER__/cicd-workflows/.github/workflows/pr-check.yml@main
               with:
                 language: __LANG__
               secrets:
                 DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
                 BOT_PAT: ${{ secrets.BOT_PAT }}
           CIEOF
-          sed -i "s/__LANG__/$LANG/" /tmp/ci.yml
+          sed -i "s/__OWNER__/$OWNER/g; s/__LANG__/$LANG/g" /tmp/ci.yml
           gh api repos/$REPO/contents/.github/workflows/ci.yml \
             -f message="Setup: CI workflow" -f content="$(base64 -w0 < /tmp/ci.yml)" --silent 2>/dev/null \
-            && echo "✅ ci.yml" || echo "⚠️ ci.yml skipped (may exist)"
+            && echo "✅ ci.yml" || echo "⚠️ ci.yml skipped"
 
           # ── 2. auto-pr.yml ──
           cat > /tmp/auto-pr.yml << 'APREOF'
@@ -88,7 +100,7 @@ jobs:
           APREOF
           gh api repos/$REPO/contents/.github/workflows/auto-pr.yml \
             -f message="Setup: Auto PR workflow" -f content="$(base64 -w0 < /tmp/auto-pr.yml)" --silent 2>/dev/null \
-            && echo "✅ auto-pr.yml" || echo "⚠️ auto-pr.yml skipped (may exist)"
+            && echo "✅ auto-pr.yml" || echo "⚠️ auto-pr.yml skipped"
 
           # ── 3. Dependabot ──
           echo 'version: 2' > /tmp/dep.yml
@@ -102,56 +114,16 @@ jobs:
           echo "  - package-ecosystem: github-actions" >> /tmp/dep.yml; echo "    directory: /" >> /tmp/dep.yml; echo "    schedule: { interval: weekly }" >> /tmp/dep.yml
           gh api repos/$REPO/contents/.github/dependabot.yml \
             -f message="Setup: Dependabot" -f content="$(base64 -w0 < /tmp/dep.yml)" --silent 2>/dev/null \
-            && echo "✅ dependabot.yml" || echo "⚠️ dependabot.yml skipped (may exist)"
+            && echo "✅ dependabot.yml" || echo "⚠️ dependabot.yml skipped"
 
           # ── 4. CODEOWNERS ──
-          echo 'config/** @vuco19725-jpg' > /tmp/co
-          echo '**/Dockerfile @vuco19725-jpg' >> /tmp/co
-          echo '**/*.yml @vuco19725-jpg' >> /tmp/co
+          echo "config/** @$APPROVER" > /tmp/co
+          echo "**/Dockerfile @$APPROVER" >> /tmp/co
+          echo "**/*.yml @$APPROVER" >> /tmp/co
           gh api repos/$REPO/contents/.github/CODEOWNERS \
             -f message="Setup: CODEOWNERS" -f content="$(base64 -w0 < /tmp/co)" --silent 2>/dev/null \
-            && echo "✅ CODEOWNERS" || echo "⚠️ CODEOWNERS skipped (may exist)"
-
-          # ── 5. CD (optional) ──
-          if [ "${{ inputs.deploy }}" = "true" ]; then
-            cat > /tmp/build-deploy.yml << 'CDEOF'
-          name: Build and Deploy
-          on:
-            push:
-              tags: ["v*"]
-
-          jobs:
-            build-and-deploy:
-              runs-on: [self-hosted, prod]
-              environment:
-                name: production
-              steps:
-                - uses: actions/checkout@v4
-                - name: Build green
-                  run: docker build -t app:green .
-                - name: Deploy green
-                  run: /opt/projects/${{ inputs.repo }}/deploy.sh green ${{ github.ref_name }}
-                - name: Health check
-                  run: |
-                    sleep 5
-                    for i in 1 2 3 4 5; do sleep 3; curl -sf http://localhost:8004/healthz && echo OK && exit 0; done
-                    exit 1
-                - name: Promote to blue
-                  run: |
-                    cd /opt/projects/${{ inputs.repo }}
-                    docker tag app:green app:blue
-                    docker compose stop app-blue 2>/dev/null || true
-                    docker compose rm -f app-blue 2>/dev/null || true
-                    docker compose up -d app-blue
-          CDEOF
-            gh api repos/$REPO/contents/.github/workflows/build-deploy.yml \
-              -f message="Setup: CD workflow" -f content="$(base64 -w0 < /tmp/build-deploy.yml)" --silent 2>/dev/null \
-              && echo "✅ build-deploy.yml" || echo "⚠️ build-deploy.yml skipped"
-          fi
+            && echo "✅ CODEOWNERS" || echo "⚠️ CODEOWNERS skipped"
 
           echo ""
-          echo "=== Setup Complete: $REPO ==="
-          echo "Next steps:"
-          echo "  1. Add secrets: DEEPSEEK_API_KEY, BOT_PAT"
-          echo "  2. Push to main → auto-PR enabled"
-          echo "  3. git tag v1.0.0 → CD triggers"
+          echo "=== Done: $REPO ==="
+          echo "Next: Add DEEPSEEK_API_KEY + BOT_PAT in repo Settings → Secrets"
