@@ -2,23 +2,14 @@ name: Project Setup
 on:
   workflow_dispatch:
     inputs:
-      owner:
-        required: false
+      repo:
+        required: true
         type: string
-        default: "vuco19725-jpg"
-        description: "GitHub username or org"
+        description: "Target repository name (e.g., cicd-)"
       languages:
         required: true
         type: string
-        description: "Languages: node,go,java,python,c (comma separated)"
-      enable-config-check:
-        required: false
-        type: boolean
-        default: false
-      enable-migration-check:
-        required: false
-        type: boolean
-        default: false
+        description: "Languages: node,go,java,python,c"
     secrets:
       SETUP_TOKEN:
         required: true
@@ -28,25 +19,27 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Generate Dependabot config
-        id: deps
+      - name: Generate and deploy configs
+        env:
+          GH_TOKEN: ${{ secrets.SETUP_TOKEN }}
+          REPO: vuco19725-jpg/${{ inputs.repo }}
+          LANGS: ${{ inputs.languages }}
         run: |
+          # Dependabot config
           echo 'version: 2' > /tmp/dependabot.yml
           echo 'updates:' >> /tmp/dependabot.yml
-          for lang in $(echo "${{ inputs.languages }}" | tr ',' ' '); do
+          for lang in $(echo "$LANGS" | tr ',' ' '); do
             case $lang in
-              node) echo "  - package-ecosystem: npm" >> /tmp/dependabot.yml
-                    echo "    directory: /" >> /tmp/dependabot.yml
-                    echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml
-                    echo "    groups: { deps: { patterns: [\"*\"], update-types: [minor, patch] } }" >> /tmp/dependabot.yml ;;
-              go)   echo "  - package-ecosystem: gomod" >> /tmp/dependabot.yml
-                    echo "    directory: /" >> /tmp/dependabot.yml
-                    echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml ;;
-              java) echo "  - package-ecosystem: maven" >> /tmp/dependabot.yml
-                    echo "    directory: /" >> /tmp/dependabot.yml
-                    echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml ;;
+              node)   echo "  - package-ecosystem: npm" >> /tmp/dependabot.yml
+                      echo "    directory: /" >> /tmp/dependabot.yml
+                      echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml
+                      echo "    groups: { deps: { patterns: [\"*\"], update-types: [minor, patch] } }" >> /tmp/dependabot.yml ;;
+              go)     echo "  - package-ecosystem: gomod" >> /tmp/dependabot.yml
+                      echo "    directory: /" >> /tmp/dependabot.yml
+                      echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml ;;
+              java)   echo "  - package-ecosystem: maven" >> /tmp/dependabot.yml
+                      echo "    directory: /" >> /tmp/dependabot.yml
+                      echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml ;;
               python) echo "  - package-ecosystem: pip" >> /tmp/dependabot.yml
                       echo "    directory: /" >> /tmp/dependabot.yml
                       echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml ;;
@@ -55,24 +48,21 @@ jobs:
           echo "  - package-ecosystem: github-actions" >> /tmp/dependabot.yml
           echo "    directory: /" >> /tmp/dependabot.yml
           echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml
-          cat /tmp/dependabot.yml
 
-      - name: Create files in target repo
-        run: |
-          REPO="${{ github.repository }}"
-          echo "=== Setup for $REPO ==="
+          echo "=== Setting up $REPO ==="
 
-          # Create .github/dependabot.yml
-          gh api repos/$REPO/contents/.github/dependabot.yml -f message="Setup Dependabot" \
-            -f content="$(base64 -w0 < /tmp/dependabot.yml)" --silent 2>/dev/null && echo "dependabot.yml created"
+          # Create dependabot.yml
+          DEP_B64=$(base64 -w0 < /tmp/dependabot.yml)
+          gh api repos/$REPO/contents/.github/dependabot.yml \
+            -f message="Setup Dependabot" -f content="$DEP_B64" --silent 2>/dev/null \
+            && echo "✅ dependabot.yml" || echo "⚠️ dependabot.yml skipped"
 
-          # Create .github/CODEOWNERS
+          # Create CODEOWNERS
           echo 'config/** @vuco19725-jpg
 **/Dockerfile @vuco19725-jpg
-**/*.yml @vuco19725-jpg' > /tmp/CODEOWNERS
-          gh api repos/$REPO/contents/.github/CODEOWNERS -f message="Setup CODEOWNERS" \
-            -f content="$(base64 -w0 < /tmp/CODEOWNERS)" --silent 2>/dev/null && echo "CODEOWNERS created"
+**/*.yml @vuco19725-jpg' | base64 -w0 > /tmp/co.b64
+          gh api repos/$REPO/contents/.github/CODEOWNERS \
+            -f message="Setup CODEOWNERS" -f content="$(cat /tmp/co.b64)" --silent 2>/dev/null \
+            && echo "✅ CODEOWNERS" || echo "⚠️ CODEOWNERS skipped"
 
-          echo "Setup complete for $REPO"
-        env:
-          GH_TOKEN: ${{ secrets.SETUP_TOKEN }}
+          echo "=== Done: $REPO ==="
