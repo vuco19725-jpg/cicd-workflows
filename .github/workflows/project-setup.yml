@@ -1,68 +1,157 @@
-name: Project Setup
+name: One-Click Project Setup
 on:
   workflow_dispatch:
     inputs:
       repo:
         required: true
         type: string
-        description: "Target repository name (e.g., cicd-)"
-      languages:
+        description: "目标仓库名 (如 my-project)"
+      language:
         required: true
-        type: string
-        description: "Languages: node,go,java,python,c"
+        type: choice
+        options: [node, go, java, python, c]
+        description: "主要编程语言"
+      deploy:
+        required: false
+        type: boolean
+        default: false
+        description: "是否添加 CD 部署配置"
     secrets:
       SETUP_TOKEN:
         required: true
-        description: "PAT with repo scope"
+        description: "有 repo 权限的 PAT"
 
 jobs:
   setup:
     runs-on: ubuntu-latest
+    env:
+      REPO: vuco19725-jpg/${{ inputs.repo }}
+      LANG: ${{ inputs.language }}
     steps:
-      - name: Generate and deploy configs
+      - name: Create all project files
         env:
           GH_TOKEN: ${{ secrets.SETUP_TOKEN }}
-          REPO: vuco19725-jpg/${{ inputs.repo }}
-          LANGS: ${{ inputs.languages }}
         run: |
-          # Dependabot config
-          echo 'version: 2' > /tmp/dependabot.yml
-          echo 'updates:' >> /tmp/dependabot.yml
-          for lang in $(echo "$LANGS" | tr ',' ' '); do
-            case $lang in
-              node)   echo "  - package-ecosystem: npm" >> /tmp/dependabot.yml
-                      echo "    directory: /" >> /tmp/dependabot.yml
-                      echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml
-                      echo "    groups: { deps: { patterns: [\"*\"], update-types: [minor, patch] } }" >> /tmp/dependabot.yml ;;
-              go)     echo "  - package-ecosystem: gomod" >> /tmp/dependabot.yml
-                      echo "    directory: /" >> /tmp/dependabot.yml
-                      echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml ;;
-              java)   echo "  - package-ecosystem: maven" >> /tmp/dependabot.yml
-                      echo "    directory: /" >> /tmp/dependabot.yml
-                      echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml ;;
-              python) echo "  - package-ecosystem: pip" >> /tmp/dependabot.yml
-                      echo "    directory: /" >> /tmp/dependabot.yml
-                      echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml ;;
-            esac
-          done
-          echo "  - package-ecosystem: github-actions" >> /tmp/dependabot.yml
-          echo "    directory: /" >> /tmp/dependabot.yml
-          echo "    schedule: { interval: weekly }" >> /tmp/dependabot.yml
+          echo "🚀 Setting up $REPO (language: $LANG)"
 
-          echo "=== Setting up $REPO ==="
+          # ── 1. ci.yml ──
+          cat > /tmp/ci.yml << 'CIEOF'
+          name: CI
+          on:
+            pull_request:
+              branches: [main]
 
-          # Create dependabot.yml
-          DEP_B64=$(base64 -w0 < /tmp/dependabot.yml)
+          permissions:
+            contents: read
+            pull-requests: write
+
+          jobs:
+            pr-check:
+              uses: vuco19725-jpg/cicd-workflows/.github/workflows/pr-check.yml@main
+              with:
+                language: __LANG__
+              secrets:
+                DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+                BOT_PAT: ${{ secrets.BOT_PAT }}
+          CIEOF
+          sed -i "s/__LANG__/$LANG/" /tmp/ci.yml
+          gh api repos/$REPO/contents/.github/workflows/ci.yml \
+            -f message="Setup: CI workflow" -f content="$(base64 -w0 < /tmp/ci.yml)" --silent 2>/dev/null \
+            && echo "✅ ci.yml" || echo "⚠️ ci.yml skipped (may exist)"
+
+          # ── 2. auto-pr.yml ──
+          cat > /tmp/auto-pr.yml << 'APREOF'
+          name: Auto Create PR
+          on:
+            push:
+              branches-ignore:
+                - main
+
+          permissions:
+            contents: read
+            pull-requests: write
+
+          jobs:
+            create-pr:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - name: Create Pull Request
+                  uses: repo-sync/pull-request@v2
+                  with:
+                    destination_branch: main
+                    github_token: ${{ secrets.GITHUB_TOKEN }}
+                    pr_title: "${{ github.event.head_commit.message }}"
+                    pr_body: |
+                      🤖 自动创建 - CI 和 AI 审查进行中
+                    pr_draft: false
+          APREOF
+          gh api repos/$REPO/contents/.github/workflows/auto-pr.yml \
+            -f message="Setup: Auto PR workflow" -f content="$(base64 -w0 < /tmp/auto-pr.yml)" --silent 2>/dev/null \
+            && echo "✅ auto-pr.yml" || echo "⚠️ auto-pr.yml skipped (may exist)"
+
+          # ── 3. Dependabot ──
+          echo 'version: 2' > /tmp/dep.yml
+          echo 'updates:' >> /tmp/dep.yml
+          case $LANG in
+            node)   echo "  - package-ecosystem: npm" >> /tmp/dep.yml; echo "    directory: /" >> /tmp/dep.yml; echo "    schedule: { interval: weekly }" >> /tmp/dep.yml; echo "    groups: { deps: { patterns: [\"*\"], update-types: [minor, patch] } }" >> /tmp/dep.yml ;;
+            go)     echo "  - package-ecosystem: gomod" >> /tmp/dep.yml; echo "    directory: /" >> /tmp/dep.yml; echo "    schedule: { interval: weekly }" >> /tmp/dep.yml ;;
+            java)   echo "  - package-ecosystem: maven" >> /tmp/dep.yml; echo "    directory: /" >> /tmp/dep.yml; echo "    schedule: { interval: weekly }" >> /tmp/dep.yml ;;
+            python) echo "  - package-ecosystem: pip" >> /tmp/dep.yml; echo "    directory: /" >> /tmp/dep.yml; echo "    schedule: { interval: weekly }" >> /tmp/dep.yml ;;
+          esac
+          echo "  - package-ecosystem: github-actions" >> /tmp/dep.yml; echo "    directory: /" >> /tmp/dep.yml; echo "    schedule: { interval: weekly }" >> /tmp/dep.yml
           gh api repos/$REPO/contents/.github/dependabot.yml \
-            -f message="Setup Dependabot" -f content="$DEP_B64" --silent 2>/dev/null \
-            && echo "✅ dependabot.yml" || echo "⚠️ dependabot.yml skipped"
+            -f message="Setup: Dependabot" -f content="$(base64 -w0 < /tmp/dep.yml)" --silent 2>/dev/null \
+            && echo "✅ dependabot.yml" || echo "⚠️ dependabot.yml skipped (may exist)"
 
-          # Create CODEOWNERS
-          echo 'config/** @vuco19725-jpg
-**/Dockerfile @vuco19725-jpg
-**/*.yml @vuco19725-jpg' | base64 -w0 > /tmp/co.b64
+          # ── 4. CODEOWNERS ──
+          echo 'config/** @vuco19725-jpg' > /tmp/co
+          echo '**/Dockerfile @vuco19725-jpg' >> /tmp/co
+          echo '**/*.yml @vuco19725-jpg' >> /tmp/co
           gh api repos/$REPO/contents/.github/CODEOWNERS \
-            -f message="Setup CODEOWNERS" -f content="$(cat /tmp/co.b64)" --silent 2>/dev/null \
-            && echo "✅ CODEOWNERS" || echo "⚠️ CODEOWNERS skipped"
+            -f message="Setup: CODEOWNERS" -f content="$(base64 -w0 < /tmp/co)" --silent 2>/dev/null \
+            && echo "✅ CODEOWNERS" || echo "⚠️ CODEOWNERS skipped (may exist)"
 
-          echo "=== Done: $REPO ==="
+          # ── 5. CD (optional) ──
+          if [ "${{ inputs.deploy }}" = "true" ]; then
+            cat > /tmp/build-deploy.yml << 'CDEOF'
+          name: Build and Deploy
+          on:
+            push:
+              tags: ["v*"]
+
+          jobs:
+            build-and-deploy:
+              runs-on: [self-hosted, prod]
+              environment:
+                name: production
+              steps:
+                - uses: actions/checkout@v4
+                - name: Build green
+                  run: docker build -t app:green .
+                - name: Deploy green
+                  run: /opt/projects/${{ inputs.repo }}/deploy.sh green ${{ github.ref_name }}
+                - name: Health check
+                  run: |
+                    sleep 5
+                    for i in 1 2 3 4 5; do sleep 3; curl -sf http://localhost:8004/healthz && echo OK && exit 0; done
+                    exit 1
+                - name: Promote to blue
+                  run: |
+                    cd /opt/projects/${{ inputs.repo }}
+                    docker tag app:green app:blue
+                    docker compose stop app-blue 2>/dev/null || true
+                    docker compose rm -f app-blue 2>/dev/null || true
+                    docker compose up -d app-blue
+          CDEOF
+            gh api repos/$REPO/contents/.github/workflows/build-deploy.yml \
+              -f message="Setup: CD workflow" -f content="$(base64 -w0 < /tmp/build-deploy.yml)" --silent 2>/dev/null \
+              && echo "✅ build-deploy.yml" || echo "⚠️ build-deploy.yml skipped"
+          fi
+
+          echo ""
+          echo "=== Setup Complete: $REPO ==="
+          echo "Next steps:"
+          echo "  1. Add secrets: DEEPSEEK_API_KEY, BOT_PAT"
+          echo "  2. Push to main → auto-PR enabled"
+          echo "  3. git tag v1.0.0 → CD triggers"
