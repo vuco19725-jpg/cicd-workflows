@@ -109,7 +109,7 @@ jobs:
       - if: ${{ inputs.lint-command != '' }}
         run: ${{ inputs.lint-command }}
       - if: ${{ inputs.lint-command == '' && inputs.language == 'go' }}
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
       - if: ${{ inputs.lint-command == '' && inputs.language == 'node' }}
