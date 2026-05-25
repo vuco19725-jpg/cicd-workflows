@@ -37,8 +37,6 @@ on:
     secrets:
       DEEPSEEK_API_KEY:
         required: false
-      GITHUB_TOKEN:
-        required: false
 
 permissions:
   contents: read
