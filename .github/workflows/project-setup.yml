@@ -64,7 +64,7 @@ jobs:
                 language: __LANG__
               secrets:
                 DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-                BOT_PAT: ${{ secrets.BOT_PAT }}
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CIEOF
           sed -i "s/__OWNER__/$OWNER/g; s/__LANG__/$LANG/g" /tmp/ci.yml
           gh api repos/$REPO/contents/.github/workflows/ci.yml \
@@ -118,7 +118,7 @@ jobs:
                 - uses: actions/checkout@v4
                   with:
                     fetch-depth: 0
-                    token: ${{ secrets.BOT_PAT }}
+                    token: ${{ secrets.GITHUB_TOKEN }}
                 - name: Delete merged branch
                   env:
                     BRANCH: ${{ github.event.pull_request.head.ref }}
@@ -159,4 +159,4 @@ jobs:
 
           echo ""
           echo "=== Done: $REPO ==="
-          echo "Next: Add DEEPSEEK_API_KEY + BOT_PAT in repo Settings → Secrets"
+          echo "Next: Add DEEPSEEK_API_KEY + GITHUB_TOKEN in repo Settings → Secrets"
