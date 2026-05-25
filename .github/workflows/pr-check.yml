@@ -91,7 +91,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check migration safety (pgvet)
-        uses: onordander/pgvet@v0.2.0
+        uses: onordander/pgvet@v0.2.1
         with:
           pattern: "./migrations/**/*.sql"
         continue-on-error: true
