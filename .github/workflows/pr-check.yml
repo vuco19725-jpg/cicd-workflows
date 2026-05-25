@@ -37,7 +37,7 @@ on:
     secrets:
       DEEPSEEK_API_KEY:
         required: false
-      BOT_PAT:
+      GITHUB_TOKEN:
         required: false
 
 permissions:
@@ -217,7 +217,7 @@ jobs:
           cp _shared/.github/ai-review-rules.md /tmp/ai-review-rules.md
           bash /tmp/ai-review.sh "${{ github.event.pull_request.number }}" "${{ github.event.pull_request.head.sha }}"
         env:
-          GH_TOKEN: ${{ secrets.BOT_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Skip AI review
         if: env.DEEPSEEK_API_KEY == ''
@@ -241,7 +241,7 @@ jobs:
       - name: Auto-merge
         run: |
           RESP=$(curl -s -X PUT \
-            -H "Authorization: token $BOT_PAT" \
+            -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/merge" \
             -d '{"merge_method":"squash"}')
@@ -253,5 +253,5 @@ jobs:
             gh pr merge --auto --squash "${{ github.event.pull_request.number }}" || true
           fi
         env:
-          BOT_PAT: ${{ secrets.BOT_PAT }}
-          GH_TOKEN: ${{ secrets.BOT_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
