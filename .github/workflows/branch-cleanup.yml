@@ -1,0 +1,31 @@
+name: Branch Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BOT_PAT }}
+
+      - name: Delete merged branch
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          case "$BRANCH" in
+            main|master|develop|staging|release/*)
+              echo "⏭️  Protected branch, skip: $BRANCH"
+              exit 0
+              ;;
+          esac
+          echo "🗑️  Deleting remote branch: $BRANCH"
+          git push origin --delete "$BRANCH"

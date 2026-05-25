@@ -102,7 +102,40 @@ jobs:
             -f message="Setup: Auto PR workflow" -f content="$(base64 -w0 < /tmp/auto-pr.yml)" --silent 2>/dev/null \
             && echo "✅ auto-pr.yml" || echo "⚠️ auto-pr.yml skipped"
 
-          # ── 3. Dependabot ──
+          # ── 3. branch-cleanup.yml ──
+          cat > /tmp/branch-cleanup.yml << 'BCEOF'
+          name: Branch Cleanup
+          on:
+            pull_request:
+              types: [closed]
+          permissions:
+            contents: write
+          jobs:
+            cleanup:
+              if: github.event.pull_request.merged == true
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                  with:
+                    fetch-depth: 0
+                    token: ${{ secrets.BOT_PAT }}
+                - name: Delete merged branch
+                  env:
+                    BRANCH: ${{ github.event.pull_request.head.ref }}
+                  run: |
+                    case "$BRANCH" in
+                      main|master|develop|staging|release/*)
+                        echo "Protected branch, skip: $BRANCH"
+                        exit 0 ;;
+                    esac
+                    echo "Deleting remote branch: $BRANCH"
+                    git push origin --delete "$BRANCH"
+          BCEOF
+          gh api repos/$REPO/contents/.github/workflows/branch-cleanup.yml \
+            -f message="Setup: Branch cleanup" -f content="$(base64 -w0 < /tmp/branch-cleanup.yml)" --silent 2>/dev/null \
+            && echo "✅ branch-cleanup.yml" || echo "⚠️ branch-cleanup.yml skipped"
+
+          # ── 4. Dependabot ──
           echo 'version: 2' > /tmp/dep.yml
           echo 'updates:' >> /tmp/dep.yml
           case $LANG in
@@ -116,7 +149,7 @@ jobs:
             -f message="Setup: Dependabot" -f content="$(base64 -w0 < /tmp/dep.yml)" --silent 2>/dev/null \
             && echo "✅ dependabot.yml" || echo "⚠️ dependabot.yml skipped"
 
-          # ── 4. CODEOWNERS ──
+          # ── 5. CODEOWNERS ──
           echo "config/** @$APPROVER" > /tmp/co
           echo "**/Dockerfile @$APPROVER" >> /tmp/co
           echo "**/*.yml @$APPROVER" >> /tmp/co
